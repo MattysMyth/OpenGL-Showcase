@@ -15,6 +15,9 @@ unsigned int vertexShader;
 unsigned int fragmentShader;
 unsigned int shaderProgram;
 
+unsigned int buffer;
+unsigned int indexBuffer;
+
 // Screen sizes, default values set at 800 x 600
 unsigned int SCREEN_WIDTH = 800;
 unsigned int SCREEN_HEIGHT = 600;
@@ -101,6 +104,63 @@ static void cleanProgram()
     glfwTerminate();
 }
 
+static void createVertexShader()
+{
+    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vertexShader);
+    // check for shader compile errors
+    int success;
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (success == GL_FALSE)
+    {
+        int length;
+        glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &length);
+        char* message = (char*)alloca(length * sizeof(char));
+        glGetShaderInfoLog(vertexShader, length, &length, message);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << message << std::endl;
+    }
+}
+
+static void createFragmentShader()
+{
+    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fragmentShader);
+    // check for shader compile errors
+    int success;
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (success == GL_FALSE)
+    {
+        int length;
+        glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &length);
+        char* message = (char*)alloca(length * sizeof(char));
+        glGetShaderInfoLog(fragmentShader, length, &length, message);
+        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << message << std::endl;
+    }
+}
+
+static void linkShaders()
+{
+    // link shaders to a program
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    glValidateProgram(shaderProgram);
+    // check for linking errors
+    int success;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (success == GL_FALSE) 
+    {
+        int length;
+        glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &length);
+        char* message = (char*)alloca(length * sizeof(char));
+        glGetProgramInfoLog(shaderProgram, length, &length, message);
+        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << message << std::endl;
+    }
+}
+
 static void createShaders()
 {
     // Build and compile a basic vertex shader
@@ -114,60 +174,11 @@ static void createShaders()
     createFragmentShader();
 
     // Create a program and link shaders for use
-    linkShaders(vertexShader, fragmentShader);
+    linkShaders();
 
     // Delete Shader objects as we've compiled and linked the program
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
-}
-
-static void createVertexShader()
-{
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource , NULL);
-    glCompileShader(vertexShader);
-    // check for shader compile errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-}
-
-static void createFragmentShader()
-{
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    // check for shader compile errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-}
-
-static void linkShaders(unsigned int vertexShader, unsigned int fragmentShader)
-{
-    // link shaders to a program
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    // check for linking errors
-    int success;
-    char infoLog[512];
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
 }
 
 int main()
@@ -184,11 +195,29 @@ int main()
         return -1;
     }
 
-    // Tells OpenGL the size of the viewport, used as reference for OpenGL functions
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    // Vertex Buffer for draw call
+    float positions[] =
+    {
+        -0.5f, -0.5f,
+        0.0f, 0.5f,
+        0.5f, -0.5f
+    };
+
+    unsigned int VAO;
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), positions, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, 0);
 
     // Create Shaders and link to a program created on the GPU
     createShaders();
+
+    glUseProgram(shaderProgram);
 
     // Render Loop, will loop through until the window is closed
     while (!glfwWindowShouldClose(window))
@@ -196,8 +225,15 @@ int main()
         // input
         processInput(window);
 
-        // check and call events and swap the buffers
+        // Draw code
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+        // Swap the buffers
         glfwSwapBuffers(window);
+
+        // Poll and process events
         glfwPollEvents();
     }
 
