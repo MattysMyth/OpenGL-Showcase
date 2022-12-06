@@ -198,6 +198,8 @@ int main()
         return -1;
     }
 
+    glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+
     // Vertex Buffer for draw call
     float positions[] =
     {
